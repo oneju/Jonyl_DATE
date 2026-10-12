@@ -1,0 +1,2 @@
+import {client} from '@/lib/server';
+export async function GET(r:Request){const url=new URL(r.url);const next=url.searchParams.get('next')==='/reset-password'?'/reset-password?verified=1':'/';try{const code=url.searchParams.get('code');if(code){const db=await client();const {error}=await db.auth.exchangeCodeForSession(code);if(!error)return Response.redirect(new URL(next,url.origin));}}catch{}return Response.redirect(new URL(next.startsWith('/reset-password')?'/reset-password?auth=error':'/?auth=error',url.origin))}

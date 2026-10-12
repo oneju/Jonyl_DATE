@@ -1,0 +1,38 @@
+# Dependencies and generated build files
+node_modules/
+.next/
+.github-pages-build/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Local credentials; keep the setup template
+.env*
+!.env.example
+
+# Test output and logs
+/test-results/
+/playwright-report/
+*.log
+
+# Local editor and OS files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Local planning, screenshots, and work records
+/AGENTS.md
+/dev-flow.md
+/docs/*
+# !/docs/setup.md
+# !/docs/github-upload.md
+
+# Keep only scripts required for setup and Pages deployment
+/scripts/*
+!/scripts/check-setup.mjs
+!/scripts/build-pages.mjs

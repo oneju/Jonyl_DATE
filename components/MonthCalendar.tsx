@@ -1,0 +1,9 @@
+ 'use client';
+import {Plus} from 'lucide-react';
+import {addDays,Occurrence} from '@/lib/domain';
+const WEEK=['일','월','화','수','목','금','토'];
+export default function MonthCalendar({date,today,events,color,onDate,onOpen,onMore}:{date:string;today:string;events:Occurrence[];color:string;onDate:(d:string)=>void;onOpen:(e:Occurrence)=>void;onMore:(d:string)=>void}){
+ const first=date.slice(0,7)+'-01',offset=new Date(first+'T12:00:00Z').getUTCDay(),start=addDays(first,-offset);
+ return <div className="month-grid" role="region" aria-label="월 달력">{WEEK.map((w,i)=><span key={w} className={'weekday '+(i===0?'sunday':'')}>{w}</span>)}{Array.from({length:42},(_,i)=>{const d=addDays(start,i),list=events.filter(e=>(color==='all'||e.color===color)&&e.start.slice(0,10)<=d&&(e.allDay?e.end>d:e.end>d+'T00:00'));
+ return <div key={d} onClick={e=>{if(e.target===e.currentTarget)onDate(d)}} className={'calendar-cell '+(d===date?'selected ':'')+(d.slice(0,7)!==date.slice(0,7)?'outside ':'')+(d===today?'is-today':'')}><button className="cell-date" onClick={()=>onDate(d)} aria-label={d+' 선택'} aria-current={d===today?'date':undefined} aria-pressed={d===date}><span>{Number(d.slice(8))}</span><span className="mobile-dots">{list.slice(0,3).map(e=><i key={e.key} className={'dot tone-'+e.color}/>)}</span></button><button type="button" className="cell-add" aria-label={d+' 일정 추가'} title="일정 추가" onClick={()=>onDate(d)}><Plus size={16}/></button><div className="desktop-events">{list.slice(0,2).map(e=><button key={e.key} className={'desktop-event tone-'+e.color} onClick={()=>onOpen(e)} title={e.title} aria-label={e.title+' '+d+' 상세 보기'}>{!e.allDay&&<time>{e.start.slice(11)}</time>}<span>{e.title}</span></button>)}{list.length>1&&<button className="more-events" onClick={()=>onMore(d)}>일정 {list.length}개 보기</button>}</div></div>})}</div>
+}

@@ -1,0 +1,2 @@
+import {authenticated,responseError} from '@/lib/server';import {token,calendarList} from '@/lib/google';
+export async function GET(){try{const {user}=await authenticated();return Response.json({calendars:await calendarList(await token(user.id))},{headers:{'Cache-Control':'no-store'}})}catch(e){const m=e instanceof Error?e.message:'';if(m.startsWith('Google'))return Response.json({error:m},{status:400});return responseError(e)}}

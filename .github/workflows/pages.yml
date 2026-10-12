@@ -1,0 +1,43 @@
+name: Publish Jongil preview to GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/configure-pages@v5
+      - run: npm ci
+      - name: Build test preview without service credentials
+        env:
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+          OWNER_NAME: ${{ github.repository_owner }}
+        run: |
+          if [ "${REPOSITORY_NAME,,}" = "${OWNER_NAME,,}.github.io" ]; then
+            export PAGES_BASE_PATH=""
+          else
+            export PAGES_BASE_PATH="/$REPOSITORY_NAME"
+          fi
+          npm run build:pages
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .github-pages-build/out
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5
