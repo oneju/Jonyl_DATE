@@ -10,7 +10,8 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "test:e2e": "playwright test",
     "check:setup": "node scripts/check-setup.mjs",
-    "build:pages": "node scripts/build-pages.mjs"
+    "check:production": "node scripts/check-setup.mjs --production",
+    "build:service": "npm run check:production && npm run build"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
@@ -30,5 +31,8 @@
     "@types/react-dom": "^19.3.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }

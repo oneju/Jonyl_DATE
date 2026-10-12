@@ -1,68 +1,60 @@
 # 종일
 
-약속 전의 준비 시간·이동·준비물을 함께 관리하는 모바일 웹 캘린더입니다.
-
-## 현재 사용 가능한 기능
-
-- 오늘·월·주·일 시간표·연간 날짜 탐색, 검색, 색상 필터
-- 일정 생성·수정·삭제, 날짜를 넘는 일정, 하루 종일, 반복과 이번만 수정·삭제
-- 준비·출발·도착 시각 계산, 준비물 체크, 다음 일정의 여유·부족 경고
-- 화면 내 알림, JSON 백업·복원
-- 브라우저 테스트 사용자 A/B와 데이터 분리
-- Supabase 회원가입·로그인·Google 로그인·로그아웃·탈퇴·비밀번호 재설정 코드
-- Google 캘린더 연결·캘린더 선택·읽기 가져오기·재가져오기·연결 해제 코드
-
-**실제 회원 및 Google 연동은 아직 외부 서비스 환경 설정 전으로 실계정 검증 전입니다.** 테스트 모드에서는 실제 회원 계정과 Google 데이터를 사용하지 않습니다. 서비스 연결은 [설정 가이드](docs/setup.md)를 따라 진행하세요.
+약속 전의 준비 시간·이동·준비물을 함께 관리하는 모바일·데스크톱 웹 캘린더입니다. 실제 회원 인증은 Supabase, 일정 저장은 PostgreSQL, Google 캘린더 연결은 서버의 OAuth API를 사용합니다.
 
 ## 실행
 
-Node.js 22 이상을 사용합니다. 버전은 `package-lock.json`으로 고정합니다.
+Node.js 22.x를 사용합니다.
 
 ```sh
 npm ci
 npm run dev
 ```
 
-일반 홈은 http://localhost:3000 입니다. 테스트는 http://localhost:3000/test 에서 **테스트 모드로 시작**을 선택하세요. 계정 화면의 **예시 일정 추가**로 준비 시각·25분 여유 예제를 확인할 수 있습니다. 자동으로 예시를 실제 데이터에 저장하지 않습니다.
+일반 서비스: `http://localhost:3000/`. 테스트 사용자 A/B: `http://localhost:3000/test`. 날짜 클릭은 새 일정 팝업, 일정 선택은 상세 팝업, 수정 버튼은 편집 화면을 엽니다. 화면 폭 900px부터 데스크톱 달력·날짜 hover +가 표시됩니다.
+
+테스트 모드는 `/test`에서만 브라우저 저장을 사용합니다. 일반 홈은 실회원 데이터만 읽고 저장합니다.
+
+## 메인 서비스 배포
+
+GitHub 저장소 `oneju/Jonyl_DATE`를 Vercel에 Import합니다. Framework는 Next.js, Root Directory는 ./, Node.js는 22.x입니다. `vercel.json`의 `npm run build:service`가 환경 설정을 점검한 뒤 서버 기능을 포함해 빌드합니다. Output Directory는 Next.js 기본값을 유지합니다.
+
+운영 환경 변수 7개를 Vercel의 Production에 등록합니다.
+
+| 변수 | 내용 |
+|---|---|
+| NEXT_PUBLIC_SUPABASE_URL | Supabase 프로젝트 URL |
+| NEXT_PUBLIC_SUPABASE_ANON_KEY | Supabase 공개/anon 키 |
+| SUPABASE_SERVICE_ROLE_KEY | Supabase 서버용 키 |
+| GOOGLE_CLIENT_ID | Google 웹 OAuth Client ID |
+| GOOGLE_CLIENT_SECRET | 같은 Client Secret |
+| GOOGLE_TOKEN_ENCRYPTION_KEY | 기존 64자리 토큰 암호화 키 |
+| APP_URL | 실제 서비스의 루트 HTTPS 주소 |
+
+`.env.local`은 Git에 올리지 않습니다. 배포 변수 변경 후 재배포합니다. 공개 서비스 APP_URL에 localhost나 하위 경로를 사용하지 않습니다. 배포 점검은 로컬 환경 파일을 대신 읽지 않습니다.
+
+Supabase Authentication의 Site URL을 서비스 주소로, Redirect URLs에는 `https://서비스주소/auth/callback`을 등록합니다. 신규 가입 허용과 Google Provider 활성화도 확인합니다. Google 웹 OAuth Client에는 서비스 원본 주소와 `https://서비스주소/api/google/callback`을 추가하고 Supabase Provider의 로그인 콜백을 유지합니다.
+
+일반 사용자의 캘린더 연결은 Google Audience의 External/게시 설정과 민감한 권한 검증 요건을 충족해야 합니다. GitHub Pages용 미리보기 배포는 제거했습니다. 기존 Pages 사이트가 켜져 있다면 Settings → Pages에서 공개를 해제하고 Vercel 주소를 사용합니다.
+
+main 업로드 후 Vercel에서 실제 서비스가 배포됩니다. `.github/workflows/ci.yml`은 코드 검사만 수행합니다. 로컬의 상세 절차는 `docs/github-upload.md`에 있습니다(현재 사용자 설정으로 문서는 Git 업로드에서 제외).
+
+## 기능·검증
+
+- 월/주/일/연 달력, 검색, 색상 필터, 일정 CRUD·반복·이번만 수정
+- 준비/출발/도착 계산, 준비물 체크, 다음 일정 여유·부족 안내
+- Supabase 이메일·Google 인증, 비밀번호 복구, 계정별 일정 저장
+- Google 일정 읽기 가져오기·재가져오기, 개인 준비 계획 유지, JSON 백업·복원
 
 ```sh
 npm test
-npm run typecheck
 npm run build
-npm run check:setup # 실제 연결 설정 누락/형식 점검
-# 앱 실행 상태에서:
+npm run typecheck
+npm run check:setup
+# 실행 중인 앱에서 브라우저 검사
 npm run test:e2e
 ```
 
-## 기술 구조
+DB 설정은 `supabase/migrations/`에 있습니다. SQL001/002는 기존 설정을 확인하고 적용합니다. 일정이 있는 회원의 탈퇴에서 확인된 DB 오류는 SQL003 수정안을 원격 적용한 뒤 재검증해야 합니다. 실제 공개 서비스의 최종 Google 동의·이메일 수신·회원 탈퇴 검증은 아직 완료되지 않았습니다.
 
-Next.js / React / TypeScript / Zod / Supabase Auth / PostgreSQL. 테스트는 Node Test, PGlite(PostgreSQL SQL·RLS 검증), Playwright + Chrome을 사용합니다.
-
-- `components/`: 모바일 화면·시간표
-- `lib/domain.ts`: 검증·날짜·반복·역산·여유 계산
-- `app/api/`: 인증된 일정 CRUD, 백업 복원, Google 연동
-- `supabase/migrations/`: 사용자별 RLS와 원자적 저장 SQL
-- `tests/`: 도메인·Google 변환·DB·브라우저 검증
-
-## 데이터 정책과 현재 범위
-
-회원 데이터의 원본은 PostgreSQL입니다. 1차 구현은 일정별 JSONB 문서로 기본 일정·계획·준비물을 묶어 저장하고, RLS로 사용자별 격리하며 revision으로 동시 수정 충돌을 차단합니다. 향후 공유·분석 기능이 필요하면 정규화된 테이블로 분리합니다. 이전 기획의 로컬 전용 저장안에서 변경되었습니다.
-
-테스트 모드는 브라우저 로컬 저장이며 실제 인증·클라우드 동기화를 대신하지 않습니다. 새 브라우저·기기에는 전달되지 않습니다.
-
-Google 연동은 최근 30일~앞으로 90일의 캘린더 발생일을 가져오는 읽기 방식입니다. Gmail에서 이미 캘린더에 등록된 일정도 대상이며 메일 본문은 읽지 않습니다. 원본 제목·시간·장소는 Google에서 관리하고 개인 준비·이동·메모·준비물은 종일에 저장합니다. Google 가져오기는 수동이며 양방향 수정·상시 동기화는 아직 없습니다.
-
-서울 시간대 기준, 하루 종일은 종료일 제외 형식으로 저장합니다. 반복의 사용자 정의 다중 요일·향후부터 분할, 지도 자동 이동 시간, 앱 종료 후 푸시, 오프라인 편집 동기화는 후속 범위입니다. PWA 설치 정보는 있으나 오프라인 서비스를 제공한다고 표시하지 않습니다.
-
-## 2026-10-12 보완
-
-연결한 일정의 시간 변경·발생일 삭제를 재검증하고, 월 밖의 연결도 계산합니다. 전체 삭제는 반복 예외의 연결까지 정리합니다. 테스트 사용자의 오래된 삭제 요청을 차단하며 회원 전환 중 이전 조회 응답을 표시하지 않습니다. Google 재가져오기 체험에서도 메모·준비 계획을 유지합니다. 서버 일정 수정 API에서 Google 원본 필드를 보호하고 백업은 검증된 기본값으로 복원합니다.
-
-비밀번호 재설정 화면 `/reset-password`와 서비스 설정 점검을 추가했습니다. 외부 프로젝트·환경 설정 완료, 실제 로그인/API 테스트 진행 상태입니다. `.env.local` 입력용 파일과 암호화 키를 준비했으며 Git에는 제외됩니다. DB에는 새 `002_link_cleanup.sql`을 001 다음에 적용하세요. 실제 메일·회원·Google 연동은 설정 이후 검증 대상입니다.
-
-## 홈·테스트 경로·데스크톱
-
-일반 홈 `/`에는 현재 월 달력이 표시됩니다. 로그인 전에도 날짜 탐색이 가능하며 일정 저장은 회원 인증이 필요합니다. 테스트 사용자 A/B와 예시 가져오기는 `/test`에서만 사용합니다. 이 경로에서는 실제 회원 세션이 있어도 테스트 데이터를 별도로 사용하고 서버 일정 API를 호출하지 않습니다. 예전 테스트 활성 플래그가 있어도 일반 홈에는 적용하지 않습니다.
-
-오늘 표시와 선택한 날짜를 분리했고, 다른 날짜를 탐색하면 **오늘로 이동**이 나타납니다. 로고를 누르면 현재 월·오늘·월 보기가 복원됩니다. 화면 폭 900px 이상에서는 왼쪽 메뉴와 넓은 달력·날짜별 일정, 중앙 편집창이 표시됩니다. 모바일은 기존 하단 메뉴를 사용합니다.
-
+Google은 최근30일~앞으로90일의 등록된 캘린더 일정을 수동으로 가져옵니다. Gmail 본문은 읽지 않습니다. 지도 자동 이동 시간·오프라인 동기화·앱 종료 후 푸시는 현재 지원 범위에 포함되지 않습니다.

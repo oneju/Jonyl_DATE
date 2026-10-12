@@ -32,7 +32,9 @@ next-env.d.ts
 # !/docs/setup.md
 # !/docs/github-upload.md
 
-# Keep only scripts required for setup and Pages deployment
+# Keep the service configuration checker
 /scripts/*
 !/scripts/check-setup.mjs
-!/scripts/build-pages.mjs
+
+# Local deployment account metadata
+.vercel/
