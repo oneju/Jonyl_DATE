@@ -32,7 +32,7 @@ Google 캘린더 가져오기를 제거했으므로 GOOGLE_CLIENT_ID, GOOGLE_CLI
 
 `.env.local`은 Git에 올리지 않습니다. 배포 변수 변경 후 재배포합니다. 공개 서비스 APP_URL에 localhost나 하위 경로를 사용하지 않습니다. 배포 점검은 로컬 환경 파일을 대신 읽지 않습니다.
 
-Supabase Authentication에서 Email Provider와 신규 가입을 활성화하고 Confirm email을 켭니다. Site URL은 서비스 주소, Redirect URLs는 `https://서비스주소/auth/callback` 및 비밀번호 복구에 쓰는 `https://서비스주소/auth/callback?next=/reset-password`를 허용합니다. 자체 SMTP와 발신자 설정을 완료하고 인증 메일 수신을 검증합니다.
+Supabase Authentication에서 Email Provider와 신규 가입을 활성화하고 Confirm email을 켭니다. Site URL은 서비스 주소, Redirect URLs는 `https://서비스주소/auth/callback` 및 비밀번호 복구에 쓰는 `https://서비스주소/auth/callback?next=/reset-password`를 허용합니다. 자체 SMTP와 발신자 설정을 완료하고 인증 메일 수신을 검증합니다. Supabase 기본 SMTP는 프로젝트 팀원 주소로만 발송할 수 있으므로 일반 사용자 가입에는 Custom SMTP가 필요합니다. Supabase → Authentication → Email → SMTP Settings에서 발신 서비스의 Host·Port·Username·Password와 검증된 발신 주소를 설정합니다. SMTP 비밀번호는 Supabase에만 저장하며 `NEXT_PUBLIC_` 환경 변수나 Git에 넣지 않습니다. `email_address_not_authorized`는 발신 대상 제한, `over_email_send_rate_limit`는 발송 제한입니다. `unexpected_failure`는 Auth 로그에서 같은 시각의 메일 발송 오류를 확인합니다. 설정 안내: https://supabase.com/docs/guides/auth/auth-smtp
 
 Google 캘린더 가져오기 화면과 서버 API는 제거했습니다. 기존 가져온 일정은 보존하며 종일에서 직접 편집할 수 있습니다. Google 로그인을 유지하려면 Supabase의 Google Provider 로그인 설정만 유지합니다.
 

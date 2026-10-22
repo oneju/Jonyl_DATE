@@ -25,7 +25,11 @@ export function credentials(email:string,password:string,signup=false,confirmati
  if(signup&&password!==confirmation)return '비밀번호 확인이 일치하지 않아요';
  return '';
 }
-export function authError(error:{code?:string;status?:number}){
- const messages:Record<string,string>={invalid_credentials:'이메일 또는 비밀번호가 맞지 않아요',email_not_confirmed:'이메일 인증을 완료한 뒤 로그인해 주세요',user_already_exists:'이미 가입된 이메일이에요. 로그인 또는 비밀번호 재설정을 이용해 주세요',email_address_invalid:'이메일 주소를 확인해 주세요',weak_password:'더 안전한 비밀번호를 사용해 주세요',signup_disabled:'현재 신규 가입이 중지되어 있어요. 관리자에게 문의해 주세요',over_email_send_rate_limit:'인증 메일 요청이 많아요. 잠시 후 다시 시도해 주세요',over_request_rate_limit:'요청이 많아요. 잠시 후 다시 시도해 주세요'};
- return messages[error.code??'']??(error.status===429?'요청이 많아요. 잠시 후 다시 시도해 주세요':'요청을 완료하지 못했어요. 연결 상태를 확인하고 다시 시도해 주세요');
+export function authError(error:{code?:string;status?:number;message?:string}){
+ const messages:Record<string,string>={email_address_not_authorized:'현재 메일 발송 설정에서는 이 주소로 인증 메일을 보낼 수 없어요. 관리자에게 SMTP 설정을 요청해 주세요',email_provider_disabled:'이메일 가입이 비활성화되어 있어요. 관리자에게 문의해 주세요',captcha_failed:'보안 인증을 완료하지 못했어요. 관리자에게 가입 설정 확인을 요청해 주세요',email_address_not_valid:'이메일 주소를 확인해 주세요',invalid_credentials:'이메일 또는 비밀번호가 맞지 않아요',email_not_confirmed:'이메일 인증을 완료한 뒤 로그인해 주세요',user_already_exists:'이미 가입된 이메일이에요. 로그인 또는 비밀번호 재설정을 이용해 주세요',email_address_invalid:'이메일 주소를 확인해 주세요',weak_password:'더 안전한 비밀번호를 사용해 주세요',signup_disabled:'현재 신규 가입이 중지되어 있어요. 관리자에게 문의해 주세요',over_email_send_rate_limit:'인증 메일 요청이 많아요. 잠시 후 다시 시도해 주세요',over_request_rate_limit:'요청이 많아요. 잠시 후 다시 시도해 주세요'};
+ if(error.code&&messages[error.code])return messages[error.code];
+ if(error.status===429)return '요청이 많아요. 잠시 후 다시 시도해 주세요';
+ if(error.code==='unexpected_failure'&&/sending (?:confirmation |recovery |magic link )?email/i.test(error.message??''))return '인증 메일 발송에 실패했어요. 관리자에게 메일 발송 설정 확인을 요청해 주세요';
+ const code=error.code&&/^[a-z_]{1,64}$/.test(error.code)?` (오류 코드: ${error.code})`:'';
+ return '요청을 완료하지 못했어요. 잠시 후 다시 시도하거나 관리자에게 문의해 주세요'+code;
 }
