@@ -26,12 +26,12 @@ import MonthCalendar from "./MonthCalendar";
 import EventDetail from "./EventDetail";
 import EmailAuth from "./EmailAuth";
 import {integerInput, eventError} from "@/lib/validation";
-import { browser, configured } from "@/lib/supabase-client";
+import { configured } from "@/lib/supabase-client";
 import {
   addDays,
   day,
-  Event,
-  Occurrence,
+  type Event,
+  type Occurrence,
   eventSchema,
   expand,
   fmt,
@@ -47,7 +47,7 @@ import {
   validTime,
 } from "@/lib/domain";
 type Mode = "today" | "calendar" | "search" | "account";
-type User = { id: string; email: string; demo: boolean };
+type User = { id: string; email: string; demo: boolean; expired?: boolean };
 const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
 const BASEKEY = "jongil.demo.";
 const COLORS = {
@@ -58,19 +58,24 @@ const COLORS = {
   pink: "분홍",
   gray: "회색",
 };
-async function api(url: string, method = "GET", body?: unknown) {
+async function api(url: string, method = "GET", body?: unknown, accountId?: string) {
   const r = await fetch(url, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(accountId ? {"x-jongil-account":accountId} : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",
   });
-  const d = await r.json();
+  const d = await r.json().catch(()=>{throw Error("서버 응답을 확인하지 못했어요. 잠시 후 다시 시도해 주세요.")});
   if (!r.ok) throw Error(d.error ?? "요청을 처리하지 못했어요");
   return d;
 }
 export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
   const [user, setUser] = useState<User | null>(null),
+    [accounts, setAccounts] = useState<User[]>([]),
+    [hiddenAccounts, setHiddenAccounts] = useState<string[]>([]),
+    [authRevision, setAuthRevision] = useState(0),
+    [draftAccountId, setDraftAccountId] = useState(""),
+    [filterOpen, setFilterOpen] = useState(false),
     [events, setEvents] = useState<Event[]>([]),
     [mode, setMode] = useState<Mode>("calendar"),
     [date, setDate] = useState(day()),
@@ -101,6 +106,8 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
     [popupPage, setPopupPage] = useState(0),
     [formTab, setFormTab] = useState("basic");
   const authDialog = useRef<HTMLDialogElement>(null);
+  const filterDialog = useRef<HTMLDialogElement>(null);
+  const authEpoch = useRef(0);
   const dialog = useRef<HTMLDialogElement>(null),
     draftKey = useRef(""),
     returnFocus = useRef<HTMLElement | null>(null);
@@ -109,7 +116,8 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
     offset = new Date(monthStart + "T12:00:00Z").getUTCDay(),
     gridStart = addDays(monthStart, -offset),
     gridEnd = addDays(gridStart, 42);
-  const visible = expand(events, gridStart, gridEnd),
+  const filteredEvents = events.filter(e=>!e.accountId||!hiddenAccounts.includes(e.accountId));
+  const visible = expand(filteredEvents, gridStart, gridEnd),
     daily = visible
       .filter((e) => e.start.slice(0, 10) <= date && e.end.slice(0, 10) >= date)
       .filter((e) => (e.allDay ? e.end > date : e.end > date + "T00:00"));
@@ -208,35 +216,14 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
       const id = localStorage.getItem("jongil.demo.active");
       if (id === "A" || id === "B")
         setUser({ id, email: "테스트 사용자 " + id, demo: true });
+    setAccounts([]);
       setLoading(false);
       return;
     }
-    const sb = browser();
-    if (sb) {
-      sb.auth.getSession().then(({ data }) => {
-        if (data.session)
-          setUser({
-            id: data.session.user.id,
-            email: data.session.user.email ?? "Google 회원",
-            demo: false,
-          });
-        else setLoading(false);
-      });
-      const { data } = sb.auth.onAuthStateChange((_, s) => {
-        if (s) {
-          setUser({
-            id: s.user.id,
-            email: s.user.email ?? "회원",
-            demo: false,
-          });
-        } else {
-          setUser(null);
-          setLoading(false);
-        }
-      });
-      return () => data.subscription.unsubscribe();
-    }
-    setLoading(false);
+    try{setHiddenAccounts(JSON.parse(localStorage.getItem('jongil.hidden-accounts')??'[]'))}catch{}
+    refreshAccounts();
+    const refresh=(e:StorageEvent)=>{if(e.key==='jongil.auth-refresh')refreshAccounts()};window.addEventListener('storage',refresh);
+    return()=>{authEpoch.current++;window.removeEventListener('storage',refresh)};
   }, [allowTest]);
   useEffect(() => {
     setEvents([]);
@@ -250,10 +237,10 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
     return () => {
       active = false;
     };
-  }, [user?.id, user?.demo]);
+  }, [user?.id, user?.demo, authRevision]);
   useEffect(() => {
     if (!user) return;
-    for (const e of expand(events, addDays(day(), -1), addDays(day(), 2))) {
+    for (const e of expand(filteredEvents, addDays(day(), -1), addDays(day(), 2))) {
       if (e.reminder === "none") continue;
       const p = e.allDay ? null : planned(e);
       const at =
@@ -281,7 +268,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
         );
       }
     }
-  }, [now, events, user]);
+  }, [now, events, user, hiddenAccounts]);
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(""), 4000);
@@ -289,11 +276,30 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
   }, [notice]);
   useEffect(() => {
     const p = new URLSearchParams(location.search);
+    if(p.get("auth")==="setup")setError("다중 계정 DB 설정이 필요해요. 관리자에게 문의해 주세요.");
     if (p.get("auth") === "error")
       setError(
         "연결하지 못했어요. 설정과 권한을 확인한 뒤 다시 시도해 주세요.",
       );
   }, []);
+  useEffect(()=>{if(filterOpen&&!filterDialog.current?.open)filterDialog.current?.showModal();else if(!filterOpen&&filterDialog.current?.open)filterDialog.current?.close()},[filterOpen]);
+  async function refreshAccounts(){
+    if(allowTest)return;
+    const epoch=++authEpoch.current;
+    try{
+      let data=await api('/api/auth/accounts');
+      if(data.legacy)data=await api('/api/auth/accounts','POST',{action:'adopt'});
+      if(epoch!==authEpoch.current)return;
+      const list:User[]=data.accounts.map((a:User)=>({...a,demo:false}));
+      setAccounts(list);setUser(list.find(a=>a.id===data.activeId)??list.find(a=>!a.expired)??list[0]??null);setAuthRevision(n=>n+1);
+      if(!list.length)setEvents([]);
+    }catch(e){if(epoch===authEpoch.current)setError((e as Error).message)}finally{if(epoch===authEpoch.current)setLoading(false)}
+  }
+  async function selectAccount(id:string){
+    if(busy)return;setBusy(true);try{await api('/api/auth/accounts','POST',{action:'select',accountId:id});await refreshAccounts()}catch(e){setError((e as Error).message)}finally{setBusy(false)}
+  }
+  function toggleAccount(id:string){setHiddenAccounts(ids=>{const next=ids.includes(id)?ids.filter(x=>x!==id):[...ids,id];localStorage.setItem('jongil.hidden-accounts',JSON.stringify(next));return next})}
+  function accountFilters(){return <fieldset className="account-filters"><legend>표시할 계정</legend>{accounts.map(a=><label className="account-filter-row" key={a.id}><input type="checkbox" aria-label={a.email+' 일정 표시'} checked={!hiddenAccounts.includes(a.id)} onChange={()=>toggleAccount(a.id)}/><span title={a.email}>{a.email}{a.expired?' · 재로그인 필요':''}</span></label>)}<button type="button" className="text-button" onClick={()=>{setHiddenAccounts([]);localStorage.setItem('jongil.hidden-accounts','[]')}}>전체 표시</button></fieldset>}
   async function load(u = user, isCurrent = () => true) {
     if (!u) return;
     setLoading(true);
@@ -311,8 +317,12 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
         if (isCurrent())
           setEvents(data.map((e: Event) => eventSchema.parse(e)));
       } else {
-        const data = await api("/api/events");
-        if (isCurrent()) setEvents(data.events);
+        const data = await api("/api/events?accounts=all");
+        if (isCurrent()) {
+          setEvents(data.events);
+          if(data.accounts)setAccounts(data.accounts.map((a:User)=>({...a,demo:false})));
+          if(data.failures?.length)setError("일부 계정의 일정을 불러오지 못했어요. 계정 화면에서 재로그인하거나 다시 불러와 주세요.");
+        }
       }
     } catch (e) {
       if (isCurrent()) setError((e as Error).message);
@@ -342,7 +352,8 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
       persistLocal([...latest.filter((x) => x.id !== e.id), saved]);
       return saved;
     }
-    const saved = (await api("/api/events", "POST", e)).event as Event;
+    const owner=e.accountId||draftAccountId||user!.id;
+    const saved = {...(await api("/api/events", "POST", e,owner)).event,accountId:owner,accountEmail:accounts.find(a=>a.id===owner)?.email} as Event;
     setEvents((es) => [...es.filter((x) => x.id !== saved.id), saved]);
     return saved;
   }
@@ -350,34 +361,23 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
     if (!allowTest) return;
     localStorage.setItem("jongil.demo.active", id);
     setUser({ id, email: "테스트 사용자 " + id, demo: true });
+    setAccounts([]);
     setMode("calendar");
     setView("month");
     setDate(day());
   }
-  async function logout() {
-    if (!demo) await browser()?.auth.signOut();
-    localStorage.removeItem("jongil.demo.active");
-    setUser(null);
-    setEvents([]);
-    setMode("calendar");
-    setView("month");
-    setDate(day());
+  async function logout(accountId=user?.id,all=false) {
+    if(busy&&!demo)return;setBusy(true);
+    try{
+      if(!demo){const remaining=await api('/api/auth/accounts','DELETE',all?{all:true}:{accountId});await refreshAccounts();localStorage.setItem('jongil.auth-refresh',String(Date.now()));if(!remaining.accounts.length)setMode('calendar')}
+      else{localStorage.removeItem('jongil.demo.active');setUser(null);setEvents([]);setMode('calendar')}
+      setView('month');setDate(day());
+    }catch(e){setError((e as Error).message)}finally{setBusy(false)}
   }
   async function googleLogin() {
-    if (!browser()) {
-      setError(
-        "Google 로그인은 Supabase 설정 후 사용할 수 있어요. 설정 가이드를 확인해 주세요.",
-      );
-      return;
-    }
-    setBusy(true);
-    const { error } = await browser()!.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: location.origin + "/auth/callback" },
-    });
-    if (error)
-      setError("로그인을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.");
-    setBusy(false);
+    if(!configured()){setError('서비스 연결 설정이 필요해요');return}
+    // Server initiates PKCE using a separate pending-login cookie; existing accounts remain.
+    location.assign('/api/auth/google');
   }
   async function close(force = false) {
     if (
@@ -400,6 +400,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
       return;
     }
     const e = o ? events.find((x) => x.id === o.baseId)! : fresh(selectedDate);
+    setDraftAccountId(e.accountId||user.id);
     setNumberInputs({});
     setFormTab("basic");
     setDayPopup(null);
@@ -438,7 +439,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
         throw Error(eventError(parsed.error));
       }
       const os = expand(
-        events.filter((x) => x.id !== e.id),
+        filteredEvents.filter((x) => x.id !== e.id),
         e.start.slice(0, 10),
         addDays(e.end.slice(0, 10), 2),
       );
@@ -446,7 +447,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
         ? "기존 일정과 시간이 겹쳐요. 그대로 저장할까요?"
         : "";
       if (e.nextId) {
-        const linked = connection(e, events);
+        const linked = connection(e, events.filter(x=>x.accountId === (e.accountId || (demo?undefined:draftAccountId))));
         if (linked.problem) throw Error(linked.problem);
         const next = linked.target!;
         if (gap(e, next) < 0)
@@ -466,6 +467,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
             },
           },
           revision: base.revision,
+          accountId:base.accountId,accountEmail:base.accountEmail,
         };
       }
       await save(e);
@@ -509,7 +511,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
         await api("/api/events", "DELETE", {
           id: base.id,
           revision: base.revision,
-        });
+        },base.accountId||user!.id);
         await load();
       }
       close(true);
@@ -572,7 +574,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
     const blob = new Blob(
       [
         JSON.stringify(
-          { version: 1, exportedAt: new Date().toISOString(), events },
+          { version: 1, exportedAt: new Date().toISOString(), events:events.filter(e=>demo||e.accountId===user?.id) },
           null,
           2,
         ),
@@ -592,13 +594,13 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
       const restored = parseBackup(d);
       if (
         !(await ask(
-          `현재 일정을 백업의 ${d.events.length}개 일정으로 교체할까요?`,
+          `${user?.email} 계정의 일정을 백업의 ${d.events.length}개 일정으로 교체할까요? 다른 계정은 유지됩니다.`,
         ))
       )
         return;
       if (demo) persistLocal(restored);
       else {
-        await api("/api/events", "PUT", { version: 1, events: restored });
+        await api("/api/events", "PUT", { version: 1, events: restored },user!.id);
         await load();
       }
       setNotice("백업을 복원했어요");
@@ -613,7 +615,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
     return list.length ? (
       <div className="events">
         {list.map((o) => {
-          const linked = connection(o, events),
+          const linked = connection(o, events.filter(e=>e.accountId===o.accountId)),
             next = linked.target;
           const valid = Boolean(next);
           return (
@@ -635,6 +637,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
                     {o.title}
                     <ArrowUpRight size={17} />
                   </span>
+                  {o.accountEmail&&<small className="account-badge">{o.accountEmail}</small>}
                   {o.location && (
                     <span className="muted location">
                       <MapPin size={13} />
@@ -719,7 +722,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
         className="sheet"
       >
         <div className="sheet-head">
-          <h2>이메일 로그인</h2>
+          <h2>{accounts.length?"다른 계정 추가":"이메일 로그인 / 가입"}</h2>
           <button onClick={() => close()} aria-label="닫기">
             <X />
           </button>
@@ -732,12 +735,12 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
         >
           Google로 로그인{!configured() ? " · 설정 필요" : ""}
         </button>
-        <EmailAuth onComplete={() => close(true)} />
+        <EmailAuth onComplete={async() => {await close(true);await refreshAccounts();localStorage.setItem('jongil.auth-refresh',String(Date.now()))}} />
       </dialog>
     );
   }
   const searchList = expand(
-    events,
+    filteredEvents,
     addDays(date, -366),
     addDays(date, 366),
   ).filter(
@@ -826,6 +829,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
             </button>
           ))}
         </div>
+        {!demo&&accounts.length>0&&<div className="desktop-account-filters">{accountFilters()}</div>}
         <div className="sidebar-footer">
           <Clock3 size={20} />
           <strong>하루를 조금 더 여유롭게.</strong>
@@ -859,7 +863,9 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
           {demo ? "사용자 " + user!.id : user ? "계정 관리" : "로그인"}
         </button>
       </div>
+      {!demo&&accounts.length>0&&<div className="mobile-account-controls"><button className="secondary" onClick={()=>setFilterOpen(true)}>계정 필터 · {accounts.filter(a=>!hiddenAccounts.includes(a.id)).length}/{accounts.length}</button></div>}
       <div className="workspace-content">
+        {!demo&&accounts.length>0&&accounts.every(a=>hiddenAccounts.includes(a.id))&&<p role="status" className="filter-empty">표시할 계정을 선택해 주세요. 계정 필터를 켜면 일정이 표시됩니다.</p>}
         {error && !sheet && (
           <div className="error" role="alert">
             {error}
@@ -909,7 +915,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
                         <strong>{Number(d.slice(8))}</strong>
                         <span
                           className={
-                            expand(events, d, addDays(d, 1)).length ? "dot" : ""
+                            expand(filteredEvents, d, addDays(d, 1)).length ? "dot" : ""
                           }
                         />
                       </button>
@@ -1106,7 +1112,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
                         </div>
                         <TimeGrid
                           date={d}
-                          events={expand(events, d, addDays(d, 1)).filter(
+                          events={expand(filteredEvents, d, addDays(d, 1)).filter(
                             (e) =>
                               colorFilter === "all" || e.color === colorFilter,
                           )}
@@ -1170,6 +1176,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
                   <span className="eyebrow">나의 하루를 안전하게</span>
                   <h1>계정과 연결</h1>
                 </div>
+                {!demo&&<section className="settings-card column" aria-label="로그인된 계정"><h2>로그인된 계정</h2>{accounts.map(a=><div className="account-manage-row" key={a.id}><div><strong>{a.email}</strong><p className="fine">{a.expired?'재로그인 필요':a.id===user.id?'현재 관리 계정':'로그인 유지 중'}</p></div>{!a.expired&&<button className="secondary" disabled={busy||a.id===user.id} onClick={()=>selectAccount(a.id)}>관리 계정 선택</button>}{a.expired&&<button className="secondary" onClick={()=>setAuthOpen(true)}>재로그인</button>}<button className="text-button" disabled={busy} aria-label={a.email+' 로그아웃'} onClick={()=>logout(a.id)}>이 계정 로그아웃</button></div>)}<button className="primary" disabled={busy} onClick={()=>setAuthOpen(true)}>다른 계정 추가</button>{accounts.length>1&&<button className="text-button" disabled={busy} onClick={async()=>{if(await ask('이 브라우저의 모든 계정에서 로그아웃할까요?'))await logout(undefined,true)}}>전체 계정 로그아웃</button>}</section>}
                 <section className="settings-card">
                   <UserRound />
                   <div>
@@ -1210,6 +1217,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
                   <div className="settings-title">
                     <Settings2 />
                     <h2>내 데이터</h2>
+                    {!demo&&<small>{user.email} 계정만</small>}
                   </div>
                   <p className="fine">
                     시간대: 서울 · 알림: 화면 내 안내만 지원
@@ -1252,8 +1260,8 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
                       } else {
                         await api("/api/account", "DELETE", {
                           confirm: "계정 삭제",
-                        });
-                        await logout();
+                        },user.id);
+                        await refreshAccounts();
                       }
                       setNotice("계정과 데이터를 삭제했어요");
                     } catch (e) {
@@ -1268,7 +1276,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
                     비밀번호 재설정
                   </a>
                 )}
-                <button className="text-button logout" onClick={logout}>
+                <button className="text-button logout" onClick={()=>logout()}>
                   <LogOut size={17} /> 로그아웃
                 </button>
               </>
@@ -1389,7 +1397,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
           <EventDetail
             key={detail.key}
             event={detail}
-            events={events}
+            events={events.filter(e=>e.accountId===detail.accountId)}
             busy={busy}
             onToggle={toggle}
             onEdit={edit}
@@ -1430,6 +1438,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
               ))}
             </div>
             <div data-form-tab="basic" hidden={formTab !== "basic"}>
+              {!demo&&<label>저장 계정<select aria-label="저장 계정" value={draft.accountId||draftAccountId} disabled={Boolean(editing)} onChange={e=>{setDraftAccountId(e.target.value);setDraft(d=>d?{...d,accountId:e.target.value,accountEmail:accounts.find(a=>a.id===e.target.value)?.email,nextId:null}:null)}}>{accounts.filter(a=>!a.expired||a.id===(draft.accountId||draftAccountId)).map(a=><option key={a.id} value={a.id}>{a.email}{a.expired?' · 재로그인 필요':''}</option>)}</select>{editing&&<small>수정·삭제는 이 일정의 원래 계정에 적용됩니다.</small>}</label>}
               <label>
                 제목
                 <input
@@ -1595,11 +1604,11 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
                       onChange={(e) => update("nextId", e.target.value || null)}
                     >
                       <option value="">연결 안 함</option>
-                      {draft.nextId && connection(draft, events).problem && (
+                      {draft.nextId && connection(draft, events.filter(e=>e.accountId === (draft.accountId || (demo?undefined:draftAccountId)))).problem && (
                         <option value={draft.nextId}>연결 확인 필요</option>
                       )}
                       {expand(
-                        events.filter((e) => e.id !== draft.id),
+                        events.filter((e) => e.id !== draft.id && e.accountId === (draft.accountId || (demo?undefined:draftAccountId))),
                         draft.start.slice(0, 10) || date,
                         addDays(draft.start.slice(0, 10) || date, 366),
                       )
@@ -1612,9 +1621,9 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
                         ))}
                     </select>
                   </label>
-                  {draft.nextId && connection(draft, events).problem && (
+                  {draft.nextId && connection(draft, events.filter(e=>e.accountId === (draft.accountId || (demo?undefined:draftAccountId)))).problem && (
                     <p className="error" role="alert">
-                      {connection(draft, events).problem}
+                      {connection(draft, events.filter(e=>e.accountId === (draft.accountId || (demo?undefined:draftAccountId)))).problem}
                     </p>
                   )}
                   <p className="fine">
@@ -1848,7 +1857,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
                       await api("/api/events", "DELETE", {
                         id: e.id,
                         revision: e.revision,
-                      });
+                      },e.accountId||user!.id);
                       await load();
                     }
                     close(true);
@@ -1864,6 +1873,7 @@ export default function Jongil({ allowTest = false }: { allowTest?: boolean }) {
         )}
 
       </dialog>
+      <dialog ref={filterDialog} className="sheet account-filter-dialog" aria-label="계정 필터" onCancel={e=>{e.preventDefault();setFilterOpen(false)}}><div className="sheet-head"><h2>계정 필터</h2><button aria-label="계정 필터 닫기" onClick={()=>setFilterOpen(false)}><X/></button></div>{accountFilters()}<button className="primary" onClick={()=>setFilterOpen(false)}>적용</button></dialog>
       {authSheet()}
       {confirmationSheet()}
     </main>

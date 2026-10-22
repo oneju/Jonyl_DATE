@@ -12,3 +12,5 @@ test('전체 삭제는 발생일 연결까지 해제하며 오래된 삭제는 �
 test('이전 백업은 기본값 복구·중복과 잘못된 종료 날짜는 거부',()=>{const e={...fresh(),title:'  백업  '};const {reminder,reminderOffset,...legacy}=e;const restored=parseBackup({version:1,events:[legacy]});assert.equal(restored[0].title,'백업');assert.equal(restored[0].reminder,'none');assert.throws(()=>parseBackup({version:1,events:[e,e]}));assert.equal(eventSchema.safeParse({...e,repeat:'weekly',repeatUntil:'2026-02-30',start:'2026-01-01T14:00',end:'2026-01-01T15:00'}).success,false)});
 
 test('백업의 잘못된 연결 날짜와 자기 연결을 거부',()=>{const e={...fresh(),title:'A'},b=fresh();assert.equal(eventSchema.safeParse({...e,nextId:b.id+'@2026-02-30T14:00'}).success,false);assert.equal(eventSchema.safeParse({...e,nextId:e.id}).success,false)});
+
+test('반복 예외가 소유 계정 표시를 덮어쓰지 못함',()=>{const e={...fresh('2026-10-22'),title:'계정 경계',accountId:'owner-a',accountEmail:'a@example.com',repeat:'weekly' as const,repeatCount:1,exceptions:{'2026-10-22T14:00':{override:{accountId:'owner-b',accountEmail:'b@example.com'}}}};const o=expand([e],'2026-10-22','2026-10-23')[0];assert.equal(o.accountId,'owner-a');assert.equal(o.accountEmail,'a@example.com');});

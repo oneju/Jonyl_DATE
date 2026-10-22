@@ -11,8 +11,7 @@ test('빈 값·문자·음수 입력은 안내 후 수정 저장 가능, 날짜 
 });
 test('이메일 가입 입력 검증과 인증 메일·재발송 안내',async({page})=>{
  let signup=0,resend=0;
- await page.route('**/auth/v1/signup*',async route=>{signup++;const body=route.request().postDataJSON();expect(body.email).toBe('member@example.com');await route.fulfill({json:{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',aud:'authenticated',email:'member@example.com',identities:[{id:'email-identity'}]}})});
- await page.route('**/auth/v1/resend*',async route=>{resend++;await route.fulfill({json:{}})});
+ await page.route('**/api/auth/email',async route=>{const body=route.request().postDataJSON();expect(body.email).toBe('member@example.com');if(body.action==='resend'){resend++;await route.fulfill({json:{ok:true}})}else{signup++;await route.fulfill({json:{ok:true,confirmationRequired:true}})}});
  await page.goto('/');await page.getByRole('button',{name:'계정',exact:true}).click();await page.getByRole('button',{name:'이메일 로그인 / 가입'}).click();
  const dialog=page.getByRole('dialog',{name:'회원 로그인'});await dialog.getByRole('button',{name:'이메일로 가입',exact:true}).click();const submit=dialog.getByRole('button',{name:'가입하고 인증 메일 받기'});
  await submit.click();await expect(dialog.getByRole('alert')).toContainText('이메일');await dialog.getByLabel('이메일',{exact:true}).fill('abc');await submit.click();await expect(dialog.getByRole('alert')).toContainText('형식');

@@ -1,28 +1,25 @@
 "use client";
 import {useEffect,useState} from 'react';
-import {browser} from '@/lib/supabase-client';
-import {authError,credentials} from '@/lib/validation';
-export default function EmailAuth({onComplete}:{onComplete:()=>void}){
+
+import {credentials} from '@/lib/validation';
+export default function EmailAuth({onComplete}:{onComplete:()=>void|Promise<void>}){
  const [mode,setMode]=useState<'login'|'signup'>('login'),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[confirmation,setConfirmation]=useState(''),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[cooldown,setCooldown]=useState(false),[pendingEmail,setPendingEmail]=useState('');
  useEffect(()=>{if(!cooldown)return;const id=setTimeout(()=>setCooldown(false),60000);return()=>clearTimeout(id)},[cooldown]);
  async function submit(e:React.FormEvent){
   e.preventDefault();if(busy)return;setError('');setMessage('');
   const issue=credentials(email,password,mode==='signup',confirmation);if(issue){setError(issue);return}
-  const sb=browser();if(!sb){setError('서비스 연결 설정이 필요해요');return}setBusy(true);
+  setBusy(true);
   try{
-   if(mode==='login'){
-    const {error}=await sb.auth.signInWithPassword({email:email.trim(),password});if(error)throw error;onComplete();
-   }else{
-    const {data,error}=await sb.auth.signUp({email:email.trim(),password,options:{emailRedirectTo:location.origin+'/auth/callback'}});if(error)throw error;
-    setPassword('');setConfirmation('');
-    if(data.session){onComplete();return}
-    setPendingEmail(email.trim());setMessage('인증 메일을 보냈어요. 메일의 링크를 눌러 가입을 완료한 뒤 로그인해 주세요. 이미 가입한 주소라면 로그인 또는 비밀번호 재설정을 이용해 주세요.');
-   }
-  }catch(error){setError(authError(error as {code?:string;status?:number}))}finally{setBusy(false)}
+   const response=await fetch('/api/auth/email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:mode,email:email.trim(),password,confirmation})});
+   const result=await response.json();if(!response.ok)throw Error(result.error??'요청을 완료하지 못했어요');
+   setPassword('');setConfirmation('');
+   if(result.account){await onComplete();return}
+   setPendingEmail(email.trim());setMessage('가입 요청을 접수했어요. 인증 메일이 도착하면 링크를 눌러 가입을 완료해 주세요. 이미 가입한 주소라면 로그인 또는 비밀번호 재설정을 이용해 주세요.');
+  }catch(error){setError(error instanceof Error?error.message:'연결 상태를 확인해 주세요')}finally{setBusy(false)}
  }
  async function resend(){
-  if(busy||cooldown)return;const sb=browser();if(!sb)return;setBusy(true);setError('');setMessage('');
-  try{const {error}=await sb.auth.resend({type:'signup',email:pendingEmail,options:{emailRedirectTo:location.origin+'/auth/callback'}});if(error)throw error;setMessage('인증 메일 재발송을 요청했어요. 스팸 메일함도 확인해 주세요.');setCooldown(true)}catch(error){setError(authError(error as {code?:string;status?:number}))}finally{setBusy(false)}
+  if(busy||cooldown)return;setBusy(true);setError('');setMessage('');
+  try{const response=await fetch('/api/auth/email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resend',email:pendingEmail})});const result=await response.json();if(!response.ok)throw Error(result.error??'메일을 요청하지 못했어요');setMessage('인증 메일 재발송을 요청했어요. 스팸 메일함도 확인해 주세요.');setCooldown(true)}catch(error){setError(error instanceof Error?error.message:'연결 상태를 확인해 주세요')}finally{setBusy(false)}
  }
  return <form noValidate onSubmit={submit}>
   <div className="row-buttons" role="group" aria-label="이메일 계정 메뉴">{(['login','signup'] as const).map(value=><button key={value} type="button" aria-pressed={mode===value} className={mode===value?'primary':'secondary'} disabled={busy} onClick={()=>{setMode(value);setError('');setMessage('');setPassword('');setConfirmation('')}}>{value==='login'?'이메일 로그인':'이메일로 가입'}</button>)}</div>

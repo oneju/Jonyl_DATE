@@ -8,6 +8,7 @@ export default function EventDetail({event:e,events,busy,onToggle,onEdit,onRemov
  const memoPages=Math.max(1,Math.ceil(e.memo.length/240)),itemPages=Math.max(1,Math.ceil(e.items.length/4)),pages=tab==='memo'?memoPages:itemPages;
  const checks=(items:Occurrence['items'])=>items.map(i=><label className="check-row" key={i.id}><input type="checkbox" checked={i.done} onChange={()=>onToggle(e,i.id)}/>{i.text}</label>);
  return <>
+ {e.accountEmail&&<p className="account-badge">소유 계정: {e.accountEmail}</p>}
  <p className="muted">{fmt(e.start)} — {e.allDay?fmt(addDays(e.end,-1)):fmt(e.end)} {e.allDay?'· 하루 종일':''}</p>
  {compact&&<div className="popup-tabs" role="tablist" aria-label="상세 내용">{tabs.map(([id,label])=><button key={id} role="tab" aria-selected={tab===id} onClick={()=>{setTab(id);setPage(0)}}>{label}</button>)}</div>}
  {(!compact||tab==='info')&&<><div className="detail-list"><p><MapPin size={17}/>{e.location||'장소 미정'}</p>{!e.allDay&&<><p>준비 시작<strong>{fmt(planned(e).preparation)}</strong></p><p>출발<strong>{fmt(planned(e).departure)}</strong></p><p>도착 목표<strong>{fmt(planned(e).arrival)}</strong></p><p>이동수단<strong>{{walk:'도보',transit:'대중교통',car:'자동차',other:'기타'}[e.travelMode]} · {e.travel}분</strong></p></>}{!compact&&e.memo&&<p className="memo">{e.memo}</p>}</div>{linked.target&&<p className="fine">다음 일정: {linked.target.title} · {gap(e,linked.target)>=0?gap(e,linked.target)+'분 여유':-gap(e,linked.target)+'분 부족'}</p>}{linked.problem&&<p className="error">{linked.problem}</p>}{!compact&&checks(e.items)}</>}

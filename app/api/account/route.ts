@@ -1,7 +1,8 @@
-import {admin,authenticated,responseError,sameOrigin} from '@/lib/server';
+import {requestAccount} from '@/lib/account-request';
+import {admin,responseError,sameOrigin} from '@/lib/server';
 export async function DELETE(r:Request){
  try{
-  sameOrigin(r);const {user,db}=await authenticated();
+  sameOrigin(r);const {user,db}=await requestAccount(r);
   let body;try{body=await r.json()}catch{return Response.json({error:'삭제 확인 문구를 입력해 주세요'},{status:400})}
   if(body?.confirm!=='계정 삭제')return Response.json({error:'‘계정 삭제’를 정확히 입력해 주세요'},{status:400});
   // One Auth deletion cascades the user's rows in the same DB transaction.
