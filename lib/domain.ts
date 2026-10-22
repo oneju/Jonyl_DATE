@@ -6,10 +6,10 @@ export type Occurrence=Event&{baseId:string;key:string;originalStart:string};
 const dateFormatter=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'});
 const timeFormatter=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
 export const day=(d=new Date())=>dateFormatter.format(d);
-export const addDays=(d:string,n:number)=>new Date(Date.parse(d+'T00:00:00Z')+n*86400000).toISOString().slice(0,10);
+export const addDays=(d:string,n:number)=>{const ms=Date.parse(d+'T00:00:00Z')+n*86400000;return Number.isFinite(ms)?new Date(ms).toISOString().slice(0,10):''};
 export const time=(v:string,allDay=false)=>Date.parse(v+(allDay?'T00:00:00+09:00':'+09:00'));
 export function validTime(v:string,allDay:boolean){const re=allDay?/^\d{4}-\d{2}-\d{2}$/:/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;if(!re.test(v)||!Number.isFinite(time(v,allDay)))return false;const y=Number(v.slice(0,4));return y>=1900&&y<=2100&&local(time(v,allDay)).slice(0,allDay?10:16)===v;}
-export function local(ms:number){return timeFormatter.format(new Date(ms)).replace(' ','T');}
+export function local(ms:number){if(!Number.isFinite(ms))return '';return timeFormatter.format(new Date(ms)).replace(' ','T');}
 export const fmt=(v:string)=>v.replace('T',' ').slice(5);
 export const planned=(e:Event)=>({arrival:local(time(e.start)-e.buffer*60000),departure:local(time(e.start)-(e.travel+e.buffer)*60000),preparation:local(time(e.start)-(e.prep+e.travel+e.buffer)*60000)});
 export const gap=(a:Event,b:Event)=>Math.round((time(b.start)-time(a.end))/60000)-b.prep-b.travel-b.buffer;

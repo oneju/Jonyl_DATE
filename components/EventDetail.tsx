@@ -14,6 +14,6 @@ export default function EventDetail({event:e,events,busy,onToggle,onEdit,onRemov
  {compact&&tab==='memo'&&<p className="paged-memo">{e.memo.slice(page*240,page*240+240)}</p>}
  {compact&&tab==='items'&&checks(e.items.slice(page*4,page*4+4))}
  {compact&&tab!=='info'&&<div className="popup-pagination"><button disabled={!page} onClick={()=>setPage(n=>n-1)}>이전 내용</button><span>{page+1} / {pages}</span><button disabled={page+1>=pages} onClick={()=>setPage(n=>n+1)}>다음 내용</button></div>}
- <div className="row-buttons"><button className="primary" onClick={()=>onEdit(e)}><Pencil size={17}/>{e.source==='google'?'준비 계획 수정':'수정'}</button><button className="secondary danger" onClick={()=>onRemove(e)} disabled={busy}><Trash2 size={17}/>삭제</button></div>
+ <div className="row-buttons"><button className="primary" onClick={()=>onEdit(e)}><Pencil size={17}/>수정</button><button className="secondary danger" onClick={()=>onRemove(e)} disabled={busy}><Trash2 size={17}/>삭제</button></div>
  </>;
 }
